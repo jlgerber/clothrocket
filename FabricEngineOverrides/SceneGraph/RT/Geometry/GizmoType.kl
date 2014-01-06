@@ -1,0 +1,377 @@
+/*
+ *  Copyright 2010-2013 Fabric Engine Inc. All rights reserved.
+ */
+
+require Math;
+require InlineGeometryType;
+
+function GizmoType.reset() {
+  this.geometry.reset();
+  this.elementIds.resize(0);
+  this.bindingIds.resize(0);
+  this.gizmoIds.resize(0);
+  this.gizmoXfos.resize(0);
+  this.gizmoHandlers.resize(0);
+}
+
+function Size GizmoType.endGizmo!(Xfo xfo, String handler, Integer bindingId, Integer gizmoId) {
+
+  // We store a buffer of gizmo ids. One for each vertex.
+  // This enables us to raycast a gollection of gizmos stored in a single
+  // geometry type, and determine which gizmo was hit.
+  Size elementId = this.gizmoXfos.size;
+  Size prevVertexCount = this.elementIds.size;
+  this.elementIds.resize(this.geometry.positions.size);
+  for (Integer i = prevVertexCount; i < this.geometry.positions.size; i++) {
+    this.elementIds[i] = elementId;
+  }
+  this.bindingIds.push(bindingId);
+  this.gizmoIds.push(gizmoId);
+  this.gizmoXfos.push(xfo);
+  this.gizmoHandlers.push(handler);
+
+  String string;
+  Scalar scalars[];
+  Vec3 vec3s[];
+  Xfo xfos[];
+  this.gizmoStringMetaData.push(string);
+  this.gizmoScalarMetaData.push(scalars);
+  this.gizmoVec3MetaData.push(vec3s);
+  this.gizmoXfoMetaData.push(xfos);
+  return elementId;
+}
+function Size GizmoType.endGizmo!(Xfo xfo, String handler, Integer gizmoId) {
+  return this.endGizmo(xfo, handler, -1, gizmoId);
+}
+
+function GizmoType.setStringMetaData(Size gizmoId, String str) {
+  if(gizmoId >= this.gizmoScalarMetaData.size())
+    return;
+  this.gizmoStringMetaData[gizmoId] = str;
+}
+
+function GizmoType.setScalarMetaData(Size gizmoId, Scalar metaData[]) {
+  if(gizmoId >= this.gizmoScalarMetaData.size())
+    return;
+  this.gizmoScalarMetaData[gizmoId] = metaData.clone();
+}
+
+function GizmoType.setVec3MetaData(Size gizmoId, Vec3 metaData[]) {
+  if(gizmoId >= this.gizmoVec3MetaData.size())
+    return;
+  this.gizmoVec3MetaData[gizmoId] = metaData.clone();
+}
+
+function GizmoType.setXfoMetaData(Size gizmoId, Xfo metaData[]) {
+  if(gizmoId >= this.gizmoXfoMetaData.size())
+    return;
+  this.gizmoXfoMetaData[gizmoId] = metaData.clone();
+}
+
+function Size[] GizmoType.generateScreenTrGizmo!(Xfo xfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Size ids[];
+  Size id;
+
+  Color yellow = Color(1.0, 1.0, 0.0, 1.0);
+  Color white = Color(1.0, 1.0, 1.0, 1.0);
+
+  Boolean active = (activeGizmo == this.gizmoIds.size);
+  this.geometry.drawTrianglesSphere(xfo, radius * 0.05, active ? white : yellow, 4);
+  id = this.endGizmo(xfo, handler, bindingId, gizmoId);
+  ids.push(id);
+
+  return ids;
+}
+
+function Size[] GizmoType.generateLinearTrGizmo!(Xfo xfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Size ids[];
+  Size id;
+
+  Color red = Color(1.0, 0.0, 0.0, 1.0);
+  Color green = Color(0.0, 1.0, 0.0, 1.0);
+  Color blue = Color(0.0, 0.0, 1.0, 1.0);
+  Color white = Color(1.0, 1.0, 1.0, 1.0);
+
+  // X Axis Gizmo
+  Xfo coneXfo;
+  coneXfo.sc = xfo.sc;
+  coneXfo.ori.setFromAxisAndAngle(Vec3(0, 0, 1), -HALF_PI);
+  coneXfo.ori = xfo.ori * coneXfo.ori;
+  coneXfo.tr = xfo.transformVector(Vec3(radius, 0, 0));
+  Boolean active = (activeGizmo == this.gizmoIds.size);
+  this.geometry.drawLine(xfo.tr, coneXfo.tr, (active ? white : red));
+  this.geometry.drawTrianglesCone(coneXfo, radius * 0.05, radius * 0.2, (active ? white : red), 4);
+  id = this.endGizmo(xfo, handler + ".x", bindingId, gizmoId);
+  ids.push(id);
+  
+  // Y Axis Gizmo
+  coneXfo.ori = xfo.ori;
+  coneXfo.tr = xfo.transformVector(Vec3(0, radius, 0));
+  active = (activeGizmo == this.gizmoIds.size);
+  this.geometry.drawLine(xfo.tr, coneXfo.tr, (active ? white : green));
+  this.geometry.drawTrianglesCone(coneXfo, radius * 0.05, radius * 0.2, (active ? white : green), 4);
+  id = this.endGizmo(xfo, handler + ".y", bindingId, gizmoId);
+  ids.push(id);
+  
+  // Z Axis Gizmo
+  coneXfo.ori.setFromAxisAndAngle(Vec3(1, 0, 0), HALF_PI);
+  coneXfo.ori = xfo.ori * coneXfo.ori;
+  coneXfo.tr = xfo.transformVector(Vec3(0, 0, radius));
+  active = (activeGizmo == this.gizmoIds.size);
+  this.geometry.drawLine(xfo.tr, coneXfo.tr, (active ? white : blue));
+  this.geometry.drawTrianglesCone(coneXfo, radius * 0.05, radius * 0.2, (active ? white : blue), 4);
+  id = this.endGizmo(xfo, handler + ".z", bindingId, gizmoId);
+  ids.push(id);
+
+  return ids;
+}
+
+// original function
+
+// modified function - we draw circles instead of triangles
+function Size[] GizmoType.generatePlanarTrGizmo!(Xfo xfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Integer planarDetail = 16; // number of segments in the planar handle
+  Size ids[];
+  Size id;
+
+  Color red = Color(1.0, 0.0, 0.0, 1.0);
+  Color green = Color(0.0, 1.0, 0.0, 1.0);
+  Color blue  = Color(0.0, 0.0, 1.0, 1.0);
+  Color white = Color(1.0, 1.0, 1.0, 1.0);
+  Color grey  = Color( 0.2, 0.2, 0.2, 0.5);
+
+  // XY Plane Gizmo
+  Scalar planeRadius = radius * 0.15;
+  Scalar solidRadius = planeRadius * 0.8;
+  Xfo planeXfo = xfo;
+  
+  planeXfo.tr = xfo.transformVector(Vec3(radius, radius, 0));
+  Boolean active = (activeGizmo == this.gizmoIds.size);
+ 
+  Xfo circleXfo;
+  circleXfo.ori.setFromAxisAndAngle(Vec3(1, 0, 0), -HALF_PI);
+  this.geometry.drawCircle(planeXfo * circleXfo, planeRadius, (active ? white : blue), planarDetail);
+  this.geometry.drawTrianglesCone(planeXfo * circleXfo, solidRadius, 0.0, grey, planarDetail);
+  id = this.endGizmo(planeXfo, handler + ".xy", bindingId, gizmoId);
+  ids.push(id);
+
+  // YZ Plane Gizmo
+  planeXfo.tr = xfo.transformVector(Vec3(0, radius, radius));
+  active = (activeGizmo == this.gizmoIds.size);
+  circleXfo.ori.setFromAxisAndAngle(Vec3(0, 0, 1), -HALF_PI); 
+  this.geometry.drawCircle(planeXfo * circleXfo, planeRadius, (active ? white : red), planarDetail);
+  this.geometry.drawTrianglesCone(planeXfo * circleXfo, solidRadius, 0.0, grey, planarDetail);
+  id = this.endGizmo(planeXfo, handler + ".yz", bindingId, gizmoId);
+  ids.push(id);
+
+  // XZ Plane Gizmo
+  planeXfo.tr = xfo.transformVector(Vec3(radius, 0, radius));
+  active = (activeGizmo == this.gizmoIds.size);
+  // We do not need to rotate the circle for the xz plane, as it is already oriented
+  // appropriately
+  this.geometry.drawCircle(planeXfo, planeRadius, (active ? white : green), planarDetail);
+  this.geometry.drawTrianglesCone(planeXfo, solidRadius, 0.0, grey, planarDetail);
+
+  id = this.endGizmo(planeXfo, handler + ".xz", bindingId, gizmoId);
+  ids.push(id);
+
+  return ids;
+}
+
+function Size[] GizmoType.generateTrGizmo!(Xfo xfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Size ids[];
+  ids += this.generateScreenTrGizmo(xfo, handler, radius, activeGizmo, bindingId, gizmoId);
+  ids += this.generateLinearTrGizmo(xfo, handler, radius, activeGizmo, bindingId, gizmoId);
+  ids += this.generatePlanarTrGizmo(xfo, handler, radius, activeGizmo, bindingId, gizmoId);
+  return ids;
+}
+
+function Size[] GizmoType.generateScreenOriGizmo!(Xfo xfo, Xfo camXfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Size ids[];
+  Size id;
+
+  Color yellow = Color(1.0, 1.0, 0.0, 1.0);
+  Color white = Color(1.0, 1.0, 1.0, 1.0);
+
+  Xfo offset;
+  Xfo circleXfo = xfo;
+  circleXfo.sc = Vec3(1.0, 1.0, 1.0);
+
+  Boolean active = (activeGizmo == this.gizmoIds.size);
+  offset.ori.setFromAxisAndAngle(Vec3(1, 0, 0), HALF_PI);
+  circleXfo.ori = camXfo.ori * offset.ori;
+  this.geometry.drawCircle(circleXfo, radius * 1.15, (active ? white : yellow), 24);
+  id = this.endGizmo(circleXfo, handler, bindingId, gizmoId);
+  ids.push(id);
+
+  return ids;
+}
+
+function Size[] GizmoType.generateAxesOriGizmo!(Xfo xfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Size ids[];
+  Size id;
+
+  Color red = Color(1.0, 0.0, 0.0, 1.0);
+  Color green = Color(0.0, 1.0, 0.0, 1.0);
+  Color blue = Color(0.0, 0.0, 1.0, 1.0);
+  Color white = Color(1.0, 1.0, 1.0, 1.0);
+
+  Xfo offset;
+  Xfo circleXfo = xfo;
+  circleXfo.sc = Vec3(1.0, 1.0, 1.0);
+  
+  Boolean active = (activeGizmo == this.gizmoIds.size);
+  offset.ori.setFromAxisAndAngle(Vec3(0, 0, 1), -HALF_PI);
+  this.geometry.drawCircle(circleXfo * offset, radius, (active ? white : red), 24);
+  id = this.endGizmo(circleXfo * offset, handler, bindingId, gizmoId);
+  ids.push(id);
+  
+  active = (activeGizmo == this.gizmoIds.size);
+  this.geometry.drawCircle(circleXfo, radius, (active ? white : green), 24);
+  id = this.endGizmo(circleXfo, handler, bindingId, gizmoId);
+  ids.push(id);
+  
+  active = (activeGizmo == this.gizmoIds.size);
+  offset.ori.setFromAxisAndAngle(Vec3(1, 0, 0), HALF_PI);
+  this.geometry.drawCircle(circleXfo * offset, radius, (active ? white : blue), 24);
+  id = this.endGizmo(circleXfo * offset, handler, bindingId, gizmoId);
+  ids.push(id);
+
+  return ids;
+}
+
+function Size[] GizmoType.generateOriGizmo!(Xfo xfo, Xfo camXfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Size ids[];
+  ids += this.generateAxesOriGizmo(xfo, handler, radius, activeGizmo, bindingId, gizmoId);
+  ids += this.generateScreenOriGizmo(xfo, camXfo, handler, radius, activeGizmo, bindingId, gizmoId);
+  return ids;
+}
+
+function Size[] GizmoType.generateScreenScGizmo!(Xfo xfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Size ids[];
+  Size id;
+
+  Color yellow = Color(1.0, 1.0, 0.0, 1.0);
+  Color white = Color(1.0, 1.0, 1.0, 1.0);
+
+  Scalar cubeWidth = radius * 0.15;
+
+  Boolean active = (activeGizmo == this.gizmoIds.size);
+  this.geometry.drawTrianglesCube(xfo, cubeWidth, cubeWidth, cubeWidth, active ? white : yellow);
+  id = this.endGizmo(xfo, handler, bindingId, gizmoId);
+  ids.push(id);
+
+  return ids;
+}
+
+function Size[] GizmoType.generateLinearScGizmo!(Xfo xfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Size ids[];
+  Size id;
+
+  Color red = Color(1.0, 0.0, 0.0, 1.0);
+  Color green = Color(0.0, 1.0, 0.0, 1.0);
+  Color blue = Color(0.0, 0.0, 1.0, 1.0);
+  Color white = Color(1.0, 1.0, 1.0, 1.0);
+
+  Scalar cubeWidth = radius * 0.075;
+  Xfo cubeXfo = xfo;
+  cubeXfo.tr = xfo.transformVector(Vec3(radius, 0, 0));
+  Boolean active = (activeGizmo == this.gizmoIds.size);
+  this.geometry.drawLine(xfo.tr, cubeXfo.tr, (active ? white : red));
+  this.geometry.drawTrianglesCube(cubeXfo, cubeWidth, cubeWidth, cubeWidth, (active ? white : red));
+  id = this.endGizmo(xfo, handler + ".x", bindingId, gizmoId);
+  ids.push(id);
+  
+  cubeXfo.tr = xfo.transformVector(Vec3(0, radius, 0));
+  active = (activeGizmo == this.gizmoIds.size);
+  this.geometry.drawLine(xfo.tr, cubeXfo.tr, (active ? white : green));
+  this.geometry.drawTrianglesCube(cubeXfo, cubeWidth, cubeWidth, cubeWidth, (active ? white : green));
+  id = this.endGizmo(xfo, handler + ".y", bindingId, gizmoId);
+  ids.push(id);
+
+  cubeXfo.tr = xfo.transformVector(Vec3(0, 0, radius));
+  active = (activeGizmo == this.gizmoIds.size);
+  this.geometry.drawLine(xfo.tr, cubeXfo.tr, (active ? white : blue));
+  this.geometry.drawTrianglesCube(cubeXfo, cubeWidth, cubeWidth, cubeWidth, (active ? white : blue));
+  id = this.endGizmo(xfo, handler + ".z", bindingId, gizmoId);
+  ids.push(id);
+  
+  return ids;
+}
+
+function Size[] GizmoType.generateScGizmo!(Xfo xfo, String handler, Scalar radius, Integer activeGizmo, Integer bindingId, Integer gizmoId) {
+  Size ids[];
+  ids += this.generateScreenScGizmo(xfo, handler, radius, activeGizmo, bindingId, gizmoId);
+  ids += this.generateLinearScGizmo(xfo, handler, radius, activeGizmo, bindingId, gizmoId);
+  return ids;
+}
+
+function Boolean GizmoType.rayIntersect(
+  io GizmoIntersection intersection,
+  Ray ray,
+  Scalar threshold
+) {
+  Boolean hit = false;
+  for (Integer i = 0; i < this.geometry.linesIndices.size(); i += 2) {
+    Size v0Id = this.geometry.linesIndices[i + 0];
+    Size v1Id = this.geometry.linesIndices[i + 1];
+    Vec3 v0 = this.geometry.positions[v0Id];
+    Vec3 v1 = this.geometry.positions[v1Id];
+    Vec3 point;
+    Scalar dist, rayParam, segmentParam;
+    if(ray.intersectLineSegment(v0, v1, dist, rayParam, segmentParam)){
+      if (dist < threshold && rayParam < intersection.distance) {
+        Integer elementId = this.elementIds[v0Id];
+        if(this.gizmoHandlers[elementId] != 'unmanipulated') {
+          hit = true;
+          intersection.point = v0.linearInterpolate(v1, segmentParam);
+          intersection.distance = rayParam;
+          intersection.elementId = elementId;
+          intersection.bindingId = this.bindingIds[elementId];
+          intersection.gizmoId = this.gizmoIds[elementId];
+          intersection.xfo = this.gizmoXfos[elementId];
+          intersection.gizmoHandler = this.gizmoHandlers[elementId];
+          intersection.stringValue = this.gizmoStringMetaData[elementId];
+          intersection.scalarValues = this.gizmoScalarMetaData[elementId];
+          intersection.vec3Values = this.gizmoVec3MetaData[elementId];
+          intersection.xfoValues = this.gizmoXfoMetaData[elementId];
+        }
+      }
+    }
+  }
+  
+  for (Integer i = 0; i < this.geometry.trianglesIndices.size(); i += 3) {
+    Size v0Id = this.geometry.trianglesIndices[i + 0];
+    Size v1Id = this.geometry.trianglesIndices[i + 1];
+    Size v2Id = this.geometry.trianglesIndices[i + 2];
+    Vec3 v0 = this.geometry.positions[v0Id];
+    Vec3 v1 = this.geometry.positions[v1Id];
+    Vec3 v2 = this.geometry.positions[v2Id];
+    Vec3 point;
+    Scalar dist, u, v;
+
+    if (ray.intersectTriangle(true, v0, v1, v2, point, dist, u, v)) {
+      hit = true;
+      if (dist < intersection.distance) {
+        Integer elementId = this.elementIds[v0Id];
+        if(this.gizmoHandlers[elementId] != 'unmanipulated') {
+          intersection.point = point;
+          intersection.distance = dist;
+          intersection.elementId = elementId;
+          intersection.bindingId = this.bindingIds[elementId];
+          intersection.gizmoId = this.gizmoIds[elementId];
+          intersection.xfo = this.gizmoXfos[elementId];
+          intersection.gizmoHandler = this.gizmoHandlers[elementId];
+          intersection.stringValue = this.gizmoStringMetaData[elementId];
+          intersection.scalarValues = this.gizmoScalarMetaData[elementId];
+          intersection.vec3Values = this.gizmoVec3MetaData[elementId];
+          intersection.xfoValues = this.gizmoXfoMetaData[elementId];
+        } else {
+          hit = false;
+        }
+      }
+    }
+  }
+  return hit;
+}
+
